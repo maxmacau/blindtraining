@@ -1,19 +1,34 @@
 import tkinter as tk
 from tkinter import simpledialog, messagebox, scrolledtext, Checkbutton, IntVar,Canvas, Scrollbar, Frame
 import random
+import sys
+import os
+
+def get_file_path(filename):
+    if getattr(sys, '_MEIPASS', False):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, filename)
+
+letter_pairs_path = get_file_path('letter_pairs_words.txt')
+high_scores_path = get_file_path('high_score.txt')
+
+print(f"Current directory: {os.getcwd()}")
+print(f"Looking for file at: {letter_pairs_path}")
 
 endless_quiz_running = False
 alphabet = 'ABCDEFGHIJKLMNOPYRRSTUVWX'
 
-def import_pairs_words(file_path):
+def import_pairs_words(letter_pairs_path):
     pairs_words = {}
     try:
-        with open(file_path, 'r') as file:
+        with open(letter_pairs_path, 'r') as file:
             for line in file:
                 pair, word = line.strip().split(':')
                 pairs_words[pair] = word
     except FileNotFoundError:
-        print(f"File not found: {file_path}")
+        print(f"File not found: {letter_pairs_path}")
     except Exception as e:
         print(f"An error occurred while reading the file: {e}")
 
@@ -23,27 +38,22 @@ def letter_pair_toggle(alphabet, selected_pairs):
     toggle_window = tk.Toplevel()
     toggle_window.title("Letter Pair Toggle")
 
-    # Set up the canvas and scrollbars
     canvas = tk.Canvas(toggle_window)
     scrollbar_x = tk.Scrollbar(toggle_window, orient="horizontal", command=canvas.xview)
     scrollbar_y = tk.Scrollbar(toggle_window, orient="vertical", command=canvas.yview)
     canvas.configure(xscrollcommand=scrollbar_x.set, yscrollcommand=scrollbar_y.set)
 
-    # Create a frame within the canvas to contain widgets
     scrollable_frame = tk.Frame(canvas)
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
-    # Variables for checkboxes
     pair_vars = {f"{a}{b}": tk.IntVar(value=1) for a in alphabet for b in alphabet}
 
-    # Update selected pairs
     def update_selected_pairs():
         selected_pairs.clear()
         selected_pairs.update({pair for pair, var in pair_vars.items() if var.get() == 1})
         toggle_window.destroy()
 
-    # Toggle functions
     def toggle_row(letter, state):
         for b in alphabet:
             pair_vars[f"{letter}{b}"].set(state)
@@ -60,22 +70,16 @@ def letter_pair_toggle(alphabet, selected_pairs):
         for var in pair_vars.values():
             var.set(0)
 
-    # Create checkboxes and control buttons
     for i, a in enumerate(alphabet):
         for j, b in enumerate(alphabet):
             pair = f"{a}{b}"
             tk.Checkbutton(scrollable_frame, text=pair, variable=pair_vars[pair]).grid(row=i+1, column=j+1, sticky="w")
-
     for i, letter in enumerate(alphabet):
         tk.Button(scrollable_frame, text=f"Row {letter}", command=lambda l=letter: toggle_row(l, 1)).grid(row=i+1, column=0)
         tk.Button(scrollable_frame, text=f"Col {letter}", command=lambda l=letter: toggle_column(l, 1)).grid(row=0, column=i+1)
-
-    # Additional control buttons
     tk.Button(scrollable_frame, text="Select All", command=select_all).grid(row=len(alphabet) + 1, column=0, columnspan=len(alphabet) + 1)
     tk.Button(scrollable_frame, text="Clear All", command=clear_all).grid(row=len(alphabet) + 2, column=0, columnspan=len(alphabet) + 1)
     tk.Button(scrollable_frame, text="Apply", command=update_selected_pairs).grid(row=len(alphabet) + 3, column=0, columnspan=len(alphabet) + 1)
-
-    # Pack the canvas and scrollbars
     scrollbar_x.pack(side="bottom", fill="x")
     scrollbar_y.pack(side="right", fill="y")
     canvas.pack(side="left", fill="both", expand=True)
@@ -100,7 +104,7 @@ def training_mode(pairs_words, output_text, selected_letters, alphabet):
         output_text.insert(tk.END, output)
 
 def quiz_mode(pairs_words, output_text, high_score_file, selected_letters, alphabet):
-    high_score = read_high_score(high_score_file)
+    high_score = read_high_score(high_scores_path)
     selected_letters_list = list(selected_letters)
     num_pairs = simpledialog.askinteger("Quiz", "How many letter pairs do you want?")
     if num_pairs is not None:
@@ -166,9 +170,9 @@ def lookup_mode(pairs_words, output_text):
         output_text.delete('1.0', tk.END)
         output_text.insert(tk.END, f"The word for {pair.upper()} is: {word}")
 
-def read_high_score(file_path):
+def read_high_score(high_scores_path):
     try:
-        with open(file_path, 'r') as file:
+        with open(high_scores_path, 'r') as file:
             return int(file.read())
     except FileNotFoundError:
         return 0
@@ -177,20 +181,8 @@ def update_high_score(file_path, high_score):
     with open(file_path, 'w') as file:
         file.write(str(high_score))
 
-def import_pairs_words(file_path):
-    pairs_words = {}
-    try:
-        with open(file_path, 'r') as file:
-            for line in file:
-                pair, word = line.strip().split(':')
-                pairs_words[pair] = word
-    except FileNotFoundError:
-        print(f"File not found: {file_path}")
-    except Exception as e:
-        print(f"An error occurred while reading the file: {e}")
-    return pairs_words
 
-def edit_pairs_words(pairs_words, output_text, file_path):
+def edit_pairs_words(pairs_words, output_text, letter_pairs_path):
     def update_pairs():
         lines = edit_text.get("1.0", tk.END).strip().split("\n")
         pairs_words.clear()
