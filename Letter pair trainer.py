@@ -34,6 +34,9 @@ def import_pairs_words(letter_pairs_path):
 
     return pairs_words
 
+
+
+
 def letter_pair_toggle(alphabet, selected_pairs):
     toggle_window = tk.Toplevel()
     toggle_window.title("Letter Pair Toggle")
@@ -48,6 +51,14 @@ def letter_pair_toggle(alphabet, selected_pairs):
     scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
     pair_vars = {f"{a}{b}": tk.IntVar(value=1) for a in alphabet for b in alphabet}
+
+    
+    def update_selected_pairs():
+        selected = {pair for pair, var in pair_vars.items() if var.get() == 1}
+        if selected:  
+            selected_pairs.clear()
+            selected_pairs.update(selected)
+        toggle_window.destroy()
 
     def update_selected_pairs():
         selected_pairs.clear()
@@ -91,41 +102,41 @@ def clear_text():
 def generate_sequence(length, alphabet):
     return ''.join(random.choices(alphabet, k=length))
 
-def training_mode(pairs_words, output_text, selected_letters, alphabet):
+
+def training_mode(pairs_words, output_text, selected_pairs):
     num_pairs = simpledialog.askinteger("Input", "How many letter pairs do you want?")
-    selected_letters_list = list(selected_letters)
     if num_pairs:
-        length = num_pairs * 2
-        sequence = ''.join(random.choice(selected_letters_list) + random.choice(alphabet) for _ in range(num_pairs))
-        split_sequence = [sequence[i:i+2] for i in range(0, length, 2)]
-        output = "Generated Letter Pairs: " + ' '.join(split_sequence) + "\n"
-        output += "Corresponding Words: " + ' '.join([pairs_words.get(pair, "Unknown") for pair in split_sequence])
+        available_pairs = [pair for pair in selected_pairs if pair in pairs_words]
+        if len(available_pairs) < num_pairs:
+            output_text.insert(tk.END, "Not enough selected pairs to generate the requested number.\n")
+            return
+        chosen_pairs = random.sample(available_pairs, num_pairs)
+        output = "Generated Letter Pairs: " + ' '.join(chosen_pairs) + "\n"
+        output += "Corresponding Words: " + ' '.join([pairs_words[pair] for pair in chosen_pairs])
         output_text.delete('1.0', tk.END)
         output_text.insert(tk.END, output)
 
-def quiz_mode(pairs_words, output_text, high_score_file, selected_letters, alphabet):
-    high_score = read_high_score(high_scores_path)
-    selected_letters_list = list(selected_letters)
+def quiz_mode(pairs_words, output_text, high_score_file, selected_pairs):
+    high_score = read_high_score(high_score_file)
     num_pairs = simpledialog.askinteger("Quiz", "How many letter pairs do you want?")
-    if num_pairs is not None:
-        length = num_pairs * 2
-        sequence = ''.join(random.choice(selected_letters_list) + random.choice(alphabet) for _ in range(num_pairs))
-        split_sequence = [sequence[i:i+2] for i in range(0, length, 2)]
+    if num_pairs:
+        available_pairs = [pair for pair in selected_pairs if pair in pairs_words]
+        if len(available_pairs) < num_pairs:
+            output_text.insert(tk.END, "Not enough selected pairs to generate the requested number.\n")
+            return
 
+        chosen_pairs = random.sample(available_pairs, num_pairs)
         incorrect_answers = 0
-        output_text.delete('1.0', tk.END)
 
-        for pair in split_sequence:
+        for pair in chosen_pairs:
             user_answer = simpledialog.askstring("Quiz", f"What is the word for {pair}?")
-            correct_word = pairs_words.get(pair, "Unknown")
-
-            if correct_word.lower() == user_answer.lower():
-                output_text.insert(tk.END, f"Correct! {pair} is '{correct_word}'.\n")
+            if pairs_words.get(pair, "").lower() != user_answer.lower():
+                incorrect_answers += 1
+                output_text.insert(tk.END, f"Incorrect. {pair} is '{pairs_words[pair]}', not '{user_answer}'.\n")
                 output_text.update_idletasks()  
                 output_text.see(tk.END)
             else:
-                incorrect_answers += 1
-                output_text.insert(tk.END, f"Incorrect. {pair} is '{correct_word}', not '{user_answer}'.\n")
+                output_text.insert(tk.END, f"Correct! {pair} is '{pairs_words[pair]}'.\n")
                 output_text.update_idletasks()  
                 output_text.see(tk.END)
 
@@ -135,33 +146,27 @@ def quiz_mode(pairs_words, output_text, high_score_file, selected_letters, alpha
         if score > high_score:
             messagebox.showinfo("New High Score!", "Congratulations! You've set a new high score!")
             update_high_score(high_score_file, score)
-
-def endless_quiz_mode(pairs_words, output_text, selected_letters, alphabet):
-    selected_letters_list = list(selected_letters)  
-
-    def run_quiz():
-        pair = random.choice(selected_letters_list) + random.choice(alphabet)
-
+            
+def endless_quiz_mode(pairs_words, output_text, selected_pairs):
+    def ask_question():
+        pair = random.choice(list(selected_pairs))
         user_answer = simpledialog.askstring("Endless Quiz", f"What is the word for {pair}?")
-        if user_answer is None:
+        if user_answer is None:  
             output_text.insert(tk.END, "Endless Quiz Mode stopped.\n")
-            return 
-
-        correct_word = pairs_words.get(pair, "Unknown")
+            return
+        correct_word = pairs_words.get(pair, "")
         if correct_word.lower() == user_answer.lower():
             output_text.insert(tk.END, f"Correct! {pair} is '{correct_word}'.\n")
             output_text.update_idletasks()  
             output_text.see(tk.END)
         else:
-            output_text.insert(tk.END, f"Incorrect. {pair} is '{correct_word}'.\n")
+            output_text.insert(tk.END, f"Incorrect. {pair} is '{correct_word}', not '{user_answer}'.\n")
             output_text.update_idletasks()  
             output_text.see(tk.END)
-
-        run_quiz() 
-
+        ask_question()
     output_text.delete('1.0', tk.END)
     output_text.insert(tk.END, "Starting Endless Quiz Mode...\n")
-    run_quiz()
+    ask_question()
     
 def lookup_mode(pairs_words, output_text):
     pair = simpledialog.askstring("Lookup", "Enter a letter pair to look up its word:")
@@ -234,7 +239,7 @@ def main_app():
 
     pairs_words = import_pairs_words('letter_pairs_words.txt')
     alphabet = 'ABCDEFGHIJKLMNOPYRRSTUVWX'
-    selected_letters = set(alphabet)  
+    selected_letters = {f'{chr(i)}{chr(j)}' for i in range(65, 89) for j in range(65, 89)}
 
     output_text = scrolledtext.ScrolledText(window, height=15, width=50, wrap=tk.WORD)
     output_text.grid(row=0, column=0, columnspan=4, padx=10, pady=10, sticky="nsew")
@@ -243,16 +248,16 @@ def main_app():
     for i in range(4):
         window.grid_columnconfigure(i, weight=1)
 
-    training_button = tk.Button(window, text="Training Mode", command=lambda: training_mode(pairs_words, output_text, selected_letters, alphabet))
+    training_button = tk.Button(window, text="Training Mode", command=lambda: training_mode(pairs_words, output_text, selected_letters))
     training_button.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
 
-    quiz_button = tk.Button(window, text="Quiz Mode", command=lambda: quiz_mode(pairs_words, output_text, 'high_score.txt', selected_letters, alphabet))
+    quiz_button = tk.Button(window, text="Quiz Mode", command=lambda: quiz_mode(pairs_words, output_text, 'high_score.txt', selected_letters))
     quiz_button.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
 
     lookup_button = tk.Button(window, text="Lookup Mode", command=lambda: lookup_mode(pairs_words, output_text))
     lookup_button.grid(row=1, column=2, padx=10, pady=10, sticky="ew")
  
-    endless_quiz_button = tk.Button(window, text="Endless Quiz Mode", command=lambda: endless_quiz_mode(pairs_words, output_text, selected_letters, alphabet))
+    endless_quiz_button = tk.Button(window, text="Endless Quiz Mode", command=lambda: endless_quiz_mode(pairs_words, output_text, selected_letters))
     endless_quiz_button.grid(row=1, column=3, padx=10, pady=10, sticky="ew")
 
     edit_button = tk.Button(window, text="Letter Pair Toggle", command=lambda: letter_pair_toggle(alphabet, selected_letters))
